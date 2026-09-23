@@ -1,96 +1,47 @@
-name: Build BARWAAQO Android APK
+name: Build APK
 
 on:
-  workflow_dispatch:
   push:
     branches:
       - main
 
 jobs:
-  build-apk:
+  build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download BARWAAQO repository
-        uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-      - name: Set up Java
-        uses: actions/setup-java@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
         with:
-          distribution: temurin
-          java-version: '17'
+          node-version: 18
 
-      - name: Find and extract BARWAAQO ZIP
-        shell: bash
+      - name: Install Capacitor
         run: |
-          set -e
+          npm install
+          npm install @capacitor/core @capacitor/cli @capacitor/android
 
-          ZIP_FILE=$(find . -maxdepth 2 -type f -name '*.zip' | head -n 1)
-
-          if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: BARWAAQO ZIP file was not found."
-            exit 1
-          fi
-
-          echo "Found ZIP: $ZIP_FILE"
-
-          mkdir -p extracted
-          unzip -q "$ZIP_FILE" -d extracted
-
-          echo "ZIP extracted successfully."
-
-      - name: Find Android project
-        shell: bash
+      - name: Build Web App
         run: |
-          set -e
+          npm run build || echo "No build script"
 
-          GRADLE_FILE=$(find extracted -type f -name 'gradlew' | head -n 1)
+      - name: Add Android Platform
+        run: npx cap add android
 
-          if [ -z "$GRADLE_FILE" ]; then
-            echo "ERROR: Android Gradle project was not found."
-            echo "Files found:"
-            find extracted -maxdepth 4 -type f | head -100
-            exit 1
-          fi
+      - name: Copy Web to Android
+        run: npx cap copy
 
-          ANDROID_DIR=$(dirname "$GRADLE_FILE")
-
-          echo "Android project found at: $ANDROID_DIR"
-          echo "ANDROID_DIR=$ANDROID_DIR" >> "$GITHUB_ENV"
-
-      - name: Make Gradle executable
-        run: chmod +x "$ANDROID_DIR/gradlew"
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-
-      - name: Build BARWAAQO APK
-        shell: bash
+      - name: Build APK
         run: |
-          set -e
-          cd "$ANDROID_DIR"
-          ./gradlew assembleDebug --no-daemon
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
 
-      - name: Find APK
-        shell: bash
-        run: |
-          set -e
-
-          APK=$(find "$ANDROID_DIR" -type f -name '*.apk' | head -n 1)
-
-          if [ -z "$APK" ]; then
-            echo "ERROR: APK was not created."
-            exit 1
-          fi
-
-          echo "APK created:"
-          ls -lh "$APK"
-
-          cp "$APK" BARWAAQO.apk
-
-      - name: Upload BARWAAQO APK
-        uses: actions/upload-artifact@v4
+      - name: Upload APK
+        uses: actions/upload-artifact@v3
         with:
-          name: BARWAAQO-Android-APK
-          path: BARWAAQO.apk
-          if-no-files-found: error
+          name: app-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+  
