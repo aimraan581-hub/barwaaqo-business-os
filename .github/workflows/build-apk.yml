@@ -1,0 +1,96 @@
+name: Build BARWAAQO Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download BARWAAQO repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Find and extract BARWAAQO ZIP
+        shell: bash
+        run: |
+          set -e
+
+          ZIP_FILE=$(find . -maxdepth 2 -type f -name '*.zip' | head -n 1)
+
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ERROR: BARWAAQO ZIP file was not found."
+            exit 1
+          fi
+
+          echo "Found ZIP: $ZIP_FILE"
+
+          mkdir -p extracted
+          unzip -q "$ZIP_FILE" -d extracted
+
+          echo "ZIP extracted successfully."
+
+      - name: Find Android project
+        shell: bash
+        run: |
+          set -e
+
+          GRADLE_FILE=$(find extracted -type f -name 'gradlew' | head -n 1)
+
+          if [ -z "$GRADLE_FILE" ]; then
+            echo "ERROR: Android Gradle project was not found."
+            echo "Files found:"
+            find extracted -maxdepth 4 -type f | head -100
+            exit 1
+          fi
+
+          ANDROID_DIR=$(dirname "$GRADLE_FILE")
+
+          echo "Android project found at: $ANDROID_DIR"
+          echo "ANDROID_DIR=$ANDROID_DIR" >> "$GITHUB_ENV"
+
+      - name: Make Gradle executable
+        run: chmod +x "$ANDROID_DIR/gradlew"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build BARWAAQO APK
+        shell: bash
+        run: |
+          set -e
+          cd "$ANDROID_DIR"
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Find APK
+        shell: bash
+        run: |
+          set -e
+
+          APK=$(find "$ANDROID_DIR" -type f -name '*.apk' | head -n 1)
+
+          if [ -z "$APK" ]; then
+            echo "ERROR: APK was not created."
+            exit 1
+          fi
+
+          echo "APK created:"
+          ls -lh "$APK"
+
+          cp "$APK" BARWAAQO.apk
+
+      - name: Upload BARWAAQO APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: BARWAAQO-Android-APK
+          path: BARWAAQO.apk
+          if-no-files-found: error
